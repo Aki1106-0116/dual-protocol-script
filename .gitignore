@@ -1,0 +1,7 @@
+/dual-protocol-script
+/*.exe
+/*.test
+/dist/
+*.log
+__pycache__/
+*.pyc

@@ -1,0 +1,16 @@
+[Unit]
+Description=Dual Protocol Script - VPN Gate home-IP egress controller
+After=network-online.target xray.service hysteria-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/default/dual-protocol-script
+ExecStart=/usr/local/bin/dual-protocol-script -web $WEB_PORT -max $MAX_EXITS -domain $PANEL_DOMAIN -tls-cert $TLS_CERT -tls-key $TLS_KEY
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=25s
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target
