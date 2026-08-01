@@ -1,0 +1,62 @@
+name: test-and-release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.18.x"
+          cache: true
+      - run: go test ./...
+      - run: go vet ./...
+      - name: Verify shell and transformer
+        run: |
+          bash -n install.sh tui-wrapper.sh sync-panel-tls.sh uninstall.sh
+          python3 -m py_compile scripts/harden_node_installer.py
+          python3 -m unittest discover -s scripts -p 'test_*.py'
+          curl -fsSL --retry 3 \
+            https://raw.githubusercontent.com/Aki1106-0116/Three-Protocol-Script/68d15b2397bb8df8f058c004c29ac6872fded09d/jb-combo-installer.sh \
+            -o /tmp/dual-protocol-node-upstream.sh
+          echo '9aa4cefdd1325794a446d458766901be7c6781de9d4262d12fcac9766c016877  /tmp/dual-protocol-node-upstream.sh' \
+            | sha256sum -c -
+          python3 scripts/harden_node_installer.py /tmp/dual-protocol-node-upstream.sh /tmp/dual-protocol-node-patched.sh
+          bash -n /tmp/dual-protocol-node-patched.sh
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.18.x"
+          cache: true
+      - name: Build package
+        env:
+          GOOS: linux
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p dist/package/scripts
+          go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" -o dist/package/dual-protocol-script .
+          cp install.sh uninstall.sh tui-wrapper.sh sync-panel-tls.sh dual-protocol-script.service LICENSE NOTICE.md README.md dist/package/
+          cp scripts/harden_node_installer.py dist/package/scripts/
+          tar -C dist/package -czf "dist/dual-protocol-script-linux-${GOARCH}.tar.gz" .
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/dual-protocol-script-linux-${{ matrix.arch }}.tar.gz
